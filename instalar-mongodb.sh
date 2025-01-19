@@ -17,54 +17,23 @@ function ayuda() {
     fi
 }
 
-function esperar_mongodb() {
-    local max_intentos=30
-    local contador=0
-    local intervalo=1
-    
-    echo "Esperando a que MongoDB esté listo..."
-    
-    while ! mongo --eval "db.adminCommand('ping')" --quiet > /dev/null 2>&1; do
-        contador=$((contador + 1))
-        if [ $contador -ge $max_intentos ]; then
-            logger "ERROR: MongoDB no respondió después de $((max_intentos * intervalo)) segundos"
-            exit 1
-        fi
-        echo -n "."
-        sleep $intervalo
-    done
-    echo "¡MongoDB está listo!"
-}
-
-function leer_configuracion() {
-    local archivo=$1
-    if [ ! -f "$archivo" ]; then
-        ayuda "El archivo de configuración $archivo no existe"
+function leer_config() {
+    if [[ ! -f "$1" ]]; then
+        echo "Error: No se encuentra el archivo de configuracion $1"
         exit 1
-    fi 
+    fi
     
     # Leer variables del archivo de configuración
-    while IFS='=' read -r key value
-    do
-        # Eliminar espacios en blanco y comentarios
+    while IFS='=' read -r key value; do
+        # Eliminar espacios en blanco
         key=$(echo "$key" | tr -d ' ')
         value=$(echo "$value" | tr -d ' ')
-        
         case "$key" in
-            "user")
-                USUARIO=$value
-                echo "Parametro USUARIO establecido con '${USUARIO}'"
-                ;;
-            "password")
-                PASSWORD=$value
-                echo "Parametro PASSWORD establecido"
-                ;;
-            "port")
-                PUERTO_MONGOD=$value
-                echo "Parametro PUERTO_MONGOD establecido con '${PUERTO_MONGOD}'"
-                ;;
+            "user") USUARIO="$value" ;;
+            "password") PASSWORD="$value" ;;
+            "port") PUERTO_MONGOD="$value" ;;
         esac
-    done < "$archivo"
+    done < "$1"
 }
 
 # Gestionar los argumentos
@@ -72,7 +41,7 @@ while getopts ":f:a" OPCION
 do
     case ${OPCION} in
         f ) CONFIG_FILE=$OPTARG
-            leer_configuracion "$CONFIG_FILE";;
+            leer_config "$CONFIG_FILE";;
         a ) ayuda; exit 0;;
         : ) ayuda "Falta el parametro para -$OPTARG"; exit 1;;
         \?) ayuda "La opcion no existe : $OPTARG"; exit 1;;
@@ -81,12 +50,12 @@ done
 
 if [ -z ${USUARIO} ]
 then
-    ayuda "El usuario debe ser especificado en el archivo de configuración"; exit 1
+    ayuda "El usuario debe ser especificado en el archivo de configuracion"; exit 1
 fi
 
 if [ -z ${PASSWORD} ]
 then
-    ayuda "La password debe ser especificada en el archivo de configuración"; exit 1
+    ayuda "La password debe ser especificada en el archivo de configuracion"; exit 1
 fi
 
 if [ -z ${PUERTO_MONGOD} ]
@@ -122,7 +91,7 @@ fi
 chown mongodb /datos/log /datos/bd
 chgrp mongodb /datos/log /datos/bd
 
-# Crear el archivo de configuración de mongodb con el puerto solicitado
+# Crear el archivo de configuracion de mongodb con el puerto solicitado
 mv /etc/mongod.conf /etc/mongod.conf.orig
 (
 cat <<MONGOD_CONF
@@ -146,8 +115,19 @@ MONGOD_CONF
 # Reiniciar el servicio de mongod para aplicar la nueva configuracion
 systemctl restart mongod
 
-# Esperar a que MongoDB esté listo para aceptar conexiones
-esperar_mongodb
+# Verificar que el servicio de MongoDB haya arrancado correctamente
+logger "Esperando a que MongoDB arranque..."
+for i in {1..15}; do
+    if mongo --eval "db.stats()" &>/dev/null; then
+        logger "¡MongoDB esta listo!"
+        break
+    fi
+    if [[ $i -eq 15 ]]; then
+        logger "ERROR: MongoDB no respondio despues de $i segundos"
+        exit 1
+    fi
+    sleep 1
+done
 
 # Crear usuario con la password proporcionada como parametro
 mongo admin << CREACION_DE_USUARIO
