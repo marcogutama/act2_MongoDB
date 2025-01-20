@@ -29,9 +29,15 @@ function leer_config() {
         key=$(echo "$key" | tr -d ' ')
         value=$(echo "$value" | tr -d ' ')
         case "$key" in
-            "user") USUARIO="$value" ;;
-            "password") PASSWORD="$value" ;;
-            "port") PUERTO_MONGOD="$value" ;;
+            "user")
+                USUARIO=$value
+                echo "Parametro USUARIO establecido con '${USUARIO}'";;
+            "password")
+                PASSWORD=$value
+                echo "Parametro PASSWORD establecido";;
+            "port")
+                PUERTO_MONGOD=$value
+                echo "Parametro PUERTO_MONGOD establecido con '${PUERTO_MONGOD}'";;
         esac
     done < "$1"
 }
@@ -79,7 +85,6 @@ then
         mongodb-org-tools=4.2.1 \
     && rm -rf /var/lib/apt/lists/* \
     && pkill -u mongodb || true \
-    && pkill -f mongod || true \
     && rm -rf /var/lib/mongodb
 fi
 
